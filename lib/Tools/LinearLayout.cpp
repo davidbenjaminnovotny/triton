@@ -127,10 +127,6 @@ BasesT validateBases(BasesT bases) {
 LinearLayout::LinearLayout(BasesT bases)
     : bases(validateBases(std::move(bases))) {}
 
-// TODO: Refactor this into
-//   pair<StringAttr, vector<vector<int>>> +
-//   vector<StringAttr> /*out dim names*/
-// ?
 LinearLayout::LinearLayout(
     ArrayRef<std::pair<StringAttr,
                        ArrayRef<std::pair<StringAttr, std::vector<int32_t>>>>>

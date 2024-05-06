@@ -201,12 +201,10 @@ emitIndicesUsingLinearLayouts(Location loc, RewriterBase &rewriter,
     SmallVector<SmallVector<Value>> ret;
     for (unsigned reg = 0; reg < ll.getInDimSize(str_attr("register")); reg++) {
       auto idxs = applyLinearLayout(loc, rewriter, ll,
-                                    {
-                                        {kRegister, i32_val(reg)},
-                                        {kLane, laneId},
-                                        {kWarp, warpId},
-                                        {kBlock, blockId},
-                                    });
+                                    {{kRegister, i32_val(reg)},
+                                     {kLane, laneId},
+                                     {kWarp, warpId},
+                                     {kBlock, blockId}});
       assert(idxs.size() == rank);
       for (unsigned k = 0; k < rank; ++k) {
         assert(idxs[k].first == str_attr("dim" + std::to_string(k)));

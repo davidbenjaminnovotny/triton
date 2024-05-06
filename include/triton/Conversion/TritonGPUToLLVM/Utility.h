@@ -438,7 +438,7 @@ inline Value dot(RewriterBase &rewriter, Location loc, ArrayRef<Value> offsets,
 // Blocked layout indices
 // -----------------------------------------------------------------------
 
-// "Applies" the given layout by computing L(indices) and returning the
+// "Applies" the given layout by computing layout(indices) and returning the
 // resulting Values.
 //
 // In other words, this generates LLVM-dialect MLIR code to "run" the layout
@@ -1005,25 +1005,29 @@ emitOffsetForSliceLayout(const SliceEncodingAttr &sliceLayout,
   if (parentOffsets.empty())
     return {};
 
-  SetVector<SmallVector<unsigned>> uniqueOffsets;
+  SmallVector<SmallVector<unsigned>> resultOffsets;
+  std::set<SmallVector<unsigned>> uniqueOffsets;
 
   for (unsigned i = 0; i < parentOffsets.size(); ++i) {
-    SmallVector<unsigned> offsets = parentOffsets[i];
+    SmallVector<unsigned> offsets(parentOffsets[i].begin(),
+                                  parentOffsets[i].end());
     offsets.erase(offsets.begin() + dim);
-    uniqueOffsets.insert(offsets);
+    if (auto [it, inserted] = uniqueOffsets.insert(offsets); inserted) {
+      resultOffsets.push_back(offsets);
+    }
   }
 
   // It can happen that after deduplicating elements above, resultOffsets has
   // fewer than getTotalElementsPerThread() elements.  In that case repeat the
   // sequence.
   int elemsPerThread = triton::gpu::getTotalElemsPerThread(type);
-  assert(uniqueOffsets.size() > 0);
-  assert(elemsPerThread % uniqueOffsets.size() == 0);
-  int numRepeats = elemsPerThread / uniqueOffsets.size();
+  assert(resultOffsets.size() > 0);
+  assert(elemsPerThread % resultOffsets.size() == 0);
+  int numRepeats = elemsPerThread / resultOffsets.size();
   SmallVector<SmallVector<unsigned>> ret;
   for (int i = 0; i < numRepeats; ++i) {
-    for (unsigned j = 0; j < uniqueOffsets.size(); ++j) {
-      ret.push_back(uniqueOffsets[j]);
+    for (unsigned j = 0; j < resultOffsets.size(); ++j) {
+      ret.push_back(SmallVector<unsigned>(resultOffsets[j]));
     }
   }
   return ret;
