@@ -10,7 +10,7 @@ namespace mlir::triton::gpu {
 // - BlockedEncodingAttrs have the following input dimensions.
 //
 //   "register": elements in one thread
-//   "thread": threads in a warp
+//   "lane": threads in a warp
 //   "warp": warps in a block/CTA
 //   "block": blocks in a cluster
 //

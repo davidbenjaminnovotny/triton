@@ -18,7 +18,7 @@ LinearLayout blockedToLinearLayout(ArrayRef<int64_t> shape,
 
   // Create the StringAttrs we'll need for our layout.
   StringAttr kRegister = StringAttr::get(ctx, "register");
-  StringAttr kThread = StringAttr::get(ctx, "thread");
+  StringAttr kLane = StringAttr::get(ctx, "lane");
   StringAttr kWarp = StringAttr::get(ctx, "warp");
   StringAttr kBlock = StringAttr::get(ctx, "block");
   std::vector<StringAttr> outDimNames;
@@ -83,7 +83,7 @@ LinearLayout blockedToLinearLayout(ArrayRef<int64_t> shape,
   // Split the shape among the register+thread+warp.
   LinearLayout ctaLayout =
       layoutForDim(kRegister, blocked.getSizePerThread(), blocked.getOrder()) *
-      layoutForDim(kThread, blocked.getThreadsPerWarp(), blocked.getOrder()) *
+      layoutForDim(kLane, blocked.getThreadsPerWarp(), blocked.getOrder()) *
       layoutForDim(kWarp, blocked.getWarpsPerCTA(), blocked.getOrder());
 
   // If the shape per CTA is larger than the layout, we repeat the layout by

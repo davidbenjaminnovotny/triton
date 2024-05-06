@@ -194,14 +194,18 @@ emitIndicesUsingLinearLayouts(Location loc, RewriterBase &rewriter,
 
     // TODO(jlebar): We could add strong typing if we wanted; for now this is
     // "stringly typed".
+    StringAttr kRegister = str_attr("register");
+    StringAttr kLane = str_attr("lane");
+    StringAttr kWarp = str_attr("warp");
+    StringAttr kBlock = str_attr("block");
     SmallVector<SmallVector<Value>> ret;
     for (unsigned reg = 0; reg < ll.getInDimSize(str_attr("register")); reg++) {
       auto idxs = applyLinearLayout(loc, rewriter, ll,
                                     {
-                                        {str_attr("register"), i32_val(reg)},
-                                        {str_attr("thread"), laneId},
-                                        {str_attr("warp"), warpId},
-                                        {str_attr("block"), blockId},
+                                        {kRegister, i32_val(reg)},
+                                        {kLane, laneId},
+                                        {kWarp, warpId},
+                                        {kBlock, blockId},
                                     });
       assert(idxs.size() == rank);
       for (unsigned k = 0; k < rank; ++k) {

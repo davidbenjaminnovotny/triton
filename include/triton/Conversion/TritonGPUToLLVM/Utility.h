@@ -438,6 +438,11 @@ inline Value dot(RewriterBase &rewriter, Location loc, ArrayRef<Value> offsets,
 // Blocked layout indices
 // -----------------------------------------------------------------------
 
+// "Applies" the given layout by computing L(indices) and returning the
+// resulting Values.
+//
+// In other words, this generates LLVM-dialect MLIR code to "run" the layout
+// function.
 SmallVector<std::pair<StringAttr, Value>>
 applyLinearLayout(Location loc, RewriterBase &rewriter,
                   const LinearLayout &layout,
@@ -485,42 +490,13 @@ emitBaseIndexWithinCTAForBlockedLayout(Location loc, RewriterBase &rewriter,
             add(multiDimThreadId[k], mul(multiDimWarpId[k], threadsPerWarpK)));
   }
 
-  // This seems to work fine.
-#if 0
-  return to_vector(make_second_range(applyLinearLayout(
-      loc, rewriter, triton::gpu::toLinearLayout(shape, blockedLayout),
-      {
-          {str_attr("register"), i32_val(0)},
-          {str_attr("thread"), laneId},
-          {str_attr("warp"), warpId},
-          {str_attr("block"), i32_val(0)},
-      })));
-#endif
-
   return multiDimBase;
 }
 
-// TODO: Switch this over to LLs.
 inline SmallVector<SmallVector<unsigned>>
 emitOffsetForBlockedLayout(const BlockedEncodingAttr &blockedLayout,
                            RankedTensorType type) {
   auto ctx = type.getContext();
-
-  // Fails on reduce test just like non-ll code with extra %.
-#if 0
-  SmallVector<SmallVector<unsigned>> ret;
-  LinearLayout ll = triton::gpu::toLinearLayout(type.getShape(), blockedLayout);
-  for (unsigned n = 0; n < triton::gpu::getTotalElemsPerThread(type); n++) {
-    auto offs = make_second_range(ll.apply({{str_attr("register"), n},
-                                            {str_attr("thread"), 0},
-                                            {str_attr("warp"), 0},
-                                            {str_attr("block"), 0}}));
-    auto &back = ret.emplace_back();
-    back.insert(back.end(), offs.begin(), offs.end());
-  }
-  return ret;
-#endif
-
   auto shape = type.getShape();
   auto sizePerThread = blockedLayout.getSizePerThread();
   auto threadsPerWarp = blockedLayout.getThreadsPerWarp();
@@ -546,12 +522,11 @@ emitOffsetForBlockedLayout(const BlockedEncodingAttr &blockedLayout,
         getMultiDimIndex<unsigned>(linearNanoTileElemId, sizePerThread, order);
     for (unsigned k = 0; k < rank; ++k) {
       unsigned reorderedMultiDimId =
-          multiDimNanoTileId[k] *
-              (sizePerThread[k] * threadsPerWarp[k] * warpsPerCTA[k]) +
-          multiDimNanoTileElemId[k];
-      // Fails on
-      // test_reduce_layouts[sum-int32-expand_reduce2d-1-src_layout0-128-16]
-      reorderedMultiDimId %= shapePerCTA[k]; // XXX
+          (multiDimNanoTileId[k] *
+               (sizePerThread[k] * threadsPerWarp[k] * warpsPerCTA[k]) +
+           multiDimNanoTileElemId[k]) %
+          shapePerCTA[k];
+
       reorderedOffset[n].push_back(reorderedMultiDimId);
     }
   }
@@ -1030,29 +1005,25 @@ emitOffsetForSliceLayout(const SliceEncodingAttr &sliceLayout,
   if (parentOffsets.empty())
     return {};
 
-  SmallVector<SmallVector<unsigned>> resultOffsets;
-  std::set<SmallVector<unsigned>> uniqueOffsets;
+  SetVector<SmallVector<unsigned>> uniqueOffsets;
 
   for (unsigned i = 0; i < parentOffsets.size(); ++i) {
     SmallVector<unsigned> offsets = parentOffsets[i];
     offsets.erase(offsets.begin() + dim);
-    if (uniqueOffsets.count(offsets) == 0) {
-      resultOffsets.push_back(offsets);
-      uniqueOffsets.insert(offsets);
-    }
+    uniqueOffsets.insert(offsets);
   }
 
-  // It can happen that after unique'ing elements above, resultOffsets has fewer
-  // than getTotalElementsPerThread() elements.  In that case repeat the
+  // It can happen that after deduplicating elements above, resultOffsets has
+  // fewer than getTotalElementsPerThread() elements.  In that case repeat the
   // sequence.
   int elemsPerThread = triton::gpu::getTotalElemsPerThread(type);
-  assert(resultOffsets.size() > 0);
-  assert(elemsPerThread % resultOffsets.size() == 0);
-  int numRepeats = elemsPerThread / resultOffsets.size();
+  assert(uniqueOffsets.size() > 0);
+  assert(elemsPerThread % uniqueOffsets.size() == 0);
+  int numRepeats = elemsPerThread / uniqueOffsets.size();
   SmallVector<SmallVector<unsigned>> ret;
-  for (unsigned j = 0; j < resultOffsets.size(); ++j) {
-    for (int i = 0; i < numRepeats; ++i) {
-      ret.push_back(resultOffsets[j]);
+  for (int i = 0; i < numRepeats; ++i) {
+    for (unsigned j = 0; j < uniqueOffsets.size(); ++j) {
+      ret.push_back(uniqueOffsets[j]);
     }
   }
   return ret;
